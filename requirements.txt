@@ -2,6 +2,7 @@ dash==2.14.1
 dash_bootstrap_components==1.5.0
 dash_extensions == 1.0.4
 dash_leaflet==1.0.11
+geobuf ==1.1.1
 geopandas==0.13.2
 pandas==1.2.4
 gunicorn
