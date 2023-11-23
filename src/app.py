@@ -5,23 +5,14 @@ import geopandas as gpd
 import dash_leaflet as dl
 import json
 from dash_extensions.javascript import assign
-import pandas as pd
-from dash.exceptions import PreventUpdate
-import os
+from assets.legende import legende
+import geobuf
 
 
 #   Chemin logos
 chemin_logo_datagrandest = 'assets\logos\Logo_DataGrandEst.png'
 chemin_logo_data_tourisme = 'assets\logos\Logo_DATAtourisme_PNG.png'
 chemin_logo_hotel = 'assets\logos\hotel.svg'
-chemin_nuites_icon = 'assets\logos\point_nuites_icon.png'
-chemin_poi_divertisement = 'assets\logos\point_divertisement_indigo.png'
-chemin_poi_jaune = 'assets\logos\point_Expo et vente_jaune.png'
-chemin_poi_pink = 'assets\logos\point_Non renseigne_pink.png'
-chemin_poi_red = 'assets\logos\point_Patrimoine naturel_rouge.png'
-chemin_poi_blue = 'assets\logos\point_patrimoine_historique_blue.png'
-chemin_poi_green = 'assets\logos\point_Social et culturel_green.png'
-chemin_poi_orange = 'assets\logos\point_sport_orange.png'
 
 
 info = "Les dates des évènements ont été obtenues à partir du site DATAtourisme. La date initiale du calendrier est le 13 décembre car c'est le jour du concours "
@@ -30,26 +21,54 @@ info = "Les dates des évènements ont été obtenues à partir du site DATAtour
 ##############                   connection to geojsons                      ##################
 
 
-# "communes" 
-chemin_commune = 'assets/geojson/communes_join.geojson'
-commune_geojson = gpd.read_file(chemin_commune,crs="EPSG:4326", geometry='geom')
+#####################            "departements"                 #############################
 
-# "departements"
-chemin_departements = 'assets/geojson/departements.geojson'
-dpt_geojson = gpd.read_file(chemin_departements,crs="EPSG:4326", geometry='geom')
+# chemin_departements = 'assets/geojson/departements.geojson'
+# dpt_geojson = gpd.read_file(chemin_departements,crs="EPSG:4326", geometry='geom')
+chemin_dpt_geobuf = 'assets/geojson/departements.pbf'
+with open(chemin_dpt_geobuf, 'rb') as f:
+        departements_data = geobuf.decode(f.read())
+
+# Create javascript function that filters on feature name.
+# dpt_filter = assign("function(feature, context){return context.hideout.includes(feature.properties.libgeo);}")
+
+#   Noms des departements
+libgeo_values = set(feature['properties']['libgeo'] for feature in departements_data['features'])
+# Crear un GeoDataFrame a partir del GeoJSON decodificado
+gdf_dpt = gpd.GeoDataFrame.from_features(departements_data['features'])
+
+
+
+
 
 #   POI PERMANENT  
-chemin_poi_permanent = 'assets/geojson/poi_permanent.geojson'
-poi_permanent_geojson = gpd.read_file(chemin_poi_permanent,crs="EPSG:4326", geometry='geom')
+# chemin_poi_permanent = 'assets/geojson/poi_permanent.geojson'
+# poi_permanent_geojson = gpd.read_file(chemin_poi_permanent,crs="EPSG:4326", geometry='geom')
+chemin_poi_geobuf = 'assets/geojson/poi_permanent.pbf'
+with open(chemin_poi_geobuf, 'rb') as f:
+        poi_permanent_geojson = geobuf.decode(f.read())
+gdf_permanents = gpd.GeoDataFrame.from_features(poi_permanent_geojson['features'])
+
+
+
 
 #   POI EVENEMENTS  
-chemin_poi_evenements = 'assets/geojson/poi_evenement.geojson'
-poi_evenement_geojson = gpd.read_file(chemin_poi_evenements,crs="EPSG:4326", geometry='geom')
+# chemin_poi_evenements = 'assets/geojson/poi_evenement.geojson'
+# poi_evenement_geojson = gpd.read_file(chemin_poi_evenements,crs="EPSG:4326", geometry='geom')
+chemin_evenements_geobuf = 'assets/geojson/poi_evenement.pbf'
+with open(chemin_evenements_geobuf, 'rb') as f:
+        poi_evenement_geojson = geobuf.decode(f.read())
+gdf_evenements = gpd.GeoDataFrame.from_features(poi_evenement_geojson['features'])
+
+
 
 #   Nuitées 
-chemin_nuites = 'assets/geojson/nuites.geojson'
-nuites_geojson = gpd.read_file(chemin_nuites,crs="EPSG:4326", geometry='geom')
-
+# chemin_nuites = 'assets/geojson/nuites.geojson'
+# nuites_geojson = gpd.read_file(chemin_nuites,crs="EPSG:4326", geometry='geom')
+chemin_nuites_geobuf = 'assets/geojson/nuites.pbf'
+with open(chemin_nuites_geobuf, 'rb') as f:
+        nuites_geojson = geobuf.decode(f.read())
+gdf_nuites = gpd.GeoDataFrame.from_features(nuites_geojson['features'])
 
 
 
@@ -58,7 +77,6 @@ app = Dash(
             __name__,
             external_stylesheets=[dbc.themes.FLATLY, 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.6.0/font/bootstrap-icons.css'],
             suppress_callback_exceptions=True,
-            # assets_folder='assets/'
             )
 server = app.server
 
@@ -144,7 +162,8 @@ app.layout =    dbc.Container(
                                                             [
                                                                 dcc.Dropdown(
                                                                     id='dpt_dropdown',
-                                                                    options=[{'label': dpt, 'value': dpt} for dpt in nuites_geojson['libdept'].unique()],
+                                                                    # options=[{'label': dpt, 'value': dpt} for dpt in nuites_geojson['libdept'].unique()],
+                                                                    options=[{'label': dpt, 'value': dpt} for dpt in libgeo_values],
                                                                     value = "Ardennes",                                            
                                                                     clearable=False,
                                                                 )
@@ -300,6 +319,14 @@ app.layout =    dbc.Container(
     
 
 
+# # # Link drop down to geojson hideout prop (could be done with a normal callback, but clientside is more performant).
+# app.clientside_callback("function(x){return x;}", Output("geojson_dpt", "hideout"), Input("dpt_dropdown", "value"))
+
+
+
+
+
+
 
 #########       Callback TYPE D'OFFRE       ###############
 
@@ -308,7 +335,7 @@ app.layout =    dbc.Container(
     [Input('dpt_dropdown', 'value')]
 )
 def update_offre(selected_departement):
-    nuites_filtered = nuites_geojson[nuites_geojson['libdept'] == selected_departement]
+    nuites_filtered = gdf_nuites[gdf_nuites['libdept'] == selected_departement]
     offre_options = [{'label': offre, 'value': offre} for offre in nuites_filtered['offre'].unique()]    
     return offre_options
 
@@ -328,7 +355,7 @@ def set_offre_values(available_options):
     [Input('dpt_dropdown', 'value'),Input('offre_dropdown', 'value')]
 )
 def update_offre(selected_departement,offre_departement):
-    nuites_filtered = nuites_geojson[(nuites_geojson['libdept'] == selected_departement) & (nuites_geojson['offre'] == offre_departement)]
+    nuites_filtered = gdf_nuites[(gdf_nuites['libdept'] == selected_departement) & (gdf_nuites['offre'] == offre_departement)]
     occupation_options = [{'label': occupation, 'value': occupation} for occupation in nuites_filtered['occup'].unique()]    
     return occupation_options
 
@@ -343,15 +370,15 @@ def set_offre_values(available_options):
 
 
 
-
-
 #######              GEOJSON des nuités l’échelle des dpt          #######
 
 @app.callback(
     Output('output_geojson_nuites', 'data'),
     [Input('dpt_dropdown', 'value'),Input('offre_dropdown', 'value'),Input('occupation_dropdown', 'value')])
-def get_filtered_geojson(selected_departement,offre,occupation):   
-    nuites_filtered_dpt = nuites_geojson[(nuites_geojson['libdept'] == selected_departement)&(nuites_geojson['offre'] == offre)&(nuites_geojson['occup'] == occupation)]  
+def get_filtered_geojson(selected_departement,offre,occupation):      
+    
+    nuites_filtered_dpt = gdf_nuites[(gdf_nuites['libdept'] == selected_departement)&(gdf_nuites['offre'] == offre)&(gdf_nuites['occup'] == occupation)]  
+    nuites_filtered_dpt.crs = {'init': 'epsg:4326'}
     nuites_geojson_string = nuites_filtered_dpt.to_crs(epsg=4326).to_json()
     nuites_geojson_filtered = json.loads(nuites_geojson_string)  # Convertir la chaine JSON en tant qu'objet JSON    
 
@@ -377,12 +404,10 @@ def get_filtered_geojson(selected_departement,offre,occupation):
 @app.callback(
     Output('output_geojson_evenements', 'data'),
     [Input('dpt_dropdown', 'value'),Input('calendrier', 'start_date'),Input('calendrier', 'end_date')])
-def get_filtered_geojson(selected_departement,date_initiale,date_finale):   
-    # if date_initiale is None or date_finale is None:
-    #     # Evitar la ejecución del callback inicialmente
-    #     raise PreventUpdate
-    
-    evenements_filtered_dpt = poi_evenement_geojson[(poi_evenement_geojson['libdept'] == selected_departement)&(poi_evenement_geojson['date_initial']>= date_initiale)&(poi_evenement_geojson['date_final']<= date_finale)]  
+def get_filtered_geojson(selected_departement,date_initiale,date_finale):     
+   
+    evenements_filtered_dpt = gdf_evenements[(gdf_evenements['libdept'] == selected_departement)&(gdf_evenements['date_initial']>= date_initiale)&(gdf_evenements['date_final']<= date_finale)]  
+    evenements_filtered_dpt.crs = {'init': 'epsg:4326'}  # Reemplaza 'tu_codigo_epsg' con el EPSG correspondiente a tu sistema de coordenadas
     evenements_geojson_string = evenements_filtered_dpt.to_crs(epsg=4326).to_json()
     evenements_geojson_filtered = json.loads(evenements_geojson_string)  # Convertir la chaine JSON en tant qu'objet JSON    
     
@@ -404,15 +429,13 @@ def get_filtered_geojson(selected_departement,date_initiale,date_finale):
 
 #######              GEOJSON des POIS PERMANENTS à l’échelle des dpt          #######
 
-
-
-
 @app.callback(
     Output('output_geojson_poi_permanent', 'data'),
     [Input('dpt_dropdown', 'value')])
 def get_filtered_geojson(selected_departement):   
     
-    poi_filtered_dpt = poi_permanent_geojson[(poi_permanent_geojson['libdept'] == selected_departement)]  
+    poi_filtered_dpt = gdf_permanents[(gdf_permanents['libdept'] == selected_departement)]  
+    poi_filtered_dpt.crs = {'init': 'epsg:4326'}
     poi_geojson_string = poi_filtered_dpt.to_crs(epsg=4326).to_json()
     poi_geojson_filtered = json.loads(poi_geojson_string)  # Convertir la chaine JSON en tant qu'objet JSON    
     
@@ -437,22 +460,22 @@ def get_filtered_geojson(selected_departement):
 
 
 
-#######              GEOJSON des Départements          #######
+# #######              GEOJSON des Départements          #######
 
 @app.callback(
     Output('output_geojson_dpt', 'data'),
     [Input('dpt_dropdown', 'value')])
 def get_filtered_geojson(selected_departement):   
-    dpt_filtered = dpt_geojson[(dpt_geojson['libgeo'] == selected_departement)]  
+
+    dpt_filtered = gdf_dpt[(gdf_dpt['libgeo'] == selected_departement)] 
+    dpt_filtered.crs = {'init': 'epsg:4326'} 
     dpt_geojson_string = dpt_filtered.to_crs(epsg=4326).to_json()
     dpt_geojson_filtered = json.loads(dpt_geojson_string)  # Convertir la chaine JSON en tant qu'objet JSON    
     
     #Création de deux listes 
     filtered_features = [] # Cette liste qui est pour l'instat vide sera rempli avec #les valeurs : 'type' et 'crs', ce qui permettra la visualisation d'un geojson dans une carte leaflet 
-    # pm10_values = [] #Cet autre liste contient les valeurs de PM10
     for feature in dpt_geojson_filtered['features']:
         filtered_features.append(feature)
-        # pm10_values.append(feature['properties']['pm10_kg'])
 
     geojson_dpt = {
         'type': 'FeatureCollection',
@@ -475,192 +498,10 @@ return L.marker(latlng, {icon: flag});
 
 
 
-@app.callback(
-    Output('map_div', 'children'),
-    [Input('output_geojson_nuites', 'data'),Input('output_geojson_evenements', 'data'),Input('output_geojson_dpt', 'data'),Input('output_geojson_poi_permanent', 'data')])
-def update_map(geojson_nuites,geojson_evenement,geojson_dpt,geojson_permanent): 
-
-    
-    #Legende
-
-    legende = html.Div(
-        [
-            html.Div(
-                [                    
-                    html.A(html.Img(src=chemin_nuites_icon,style={"width": "15px", "height": "15px","marginLeft": "10px","justifyContent": "start",})),  
-                    html.A(html.Img(src=chemin_logo_hotel,style={"width": "15px", "height": "15px","marginLeft": "5px","justifyContent": "start",})),                         
-                                      
-                    html.Span("Nuitées", 
-                              style={'fontSize':'12px', 'fontFamily':'Lato',"marginLeft": "10px","justifyContent": "start",}
-                    ),   
-
-                ],style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "alignContent": "space-around",
-                    "marginBottom": "5px",
-                    "marginTop": "15px",}
-            ),            
-
-            html.Div(
-                [
-                    html.Span("Points d'intérêts & évènements",style={'fontSize':'13px', 'fontFamily':'Lato',"marginLeft": "5px","justifyContent": "start",'fontWeight': 'Bold'}) 
-                ]
-            ),
-
-            html.Div(
-                [                    
-                    html.A(html.Img(src=chemin_poi_divertisement,style={"width": "15px", "height": "15px","marginLeft": "10px","justifyContent": "start",})),                        
-                    html.Span(
-                            html.I(className="bi bi-circle-fill", style={'color': '#4b0082','fontSize': '12px'}),
-                            style={'marginLeft': '5px'}
-                    ),                   
-                    html.Span("Divertissement", 
-                              style={'fontSize':'12px', 'fontFamily':'Lato',"marginLeft": "10px","justifyContent": "start",}
-                    ),   
-
-                ],style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "alignContent": "space-around",
-                    "marginBottom": "5px",
-                    "marginTop": "5px",}
-            ),
-
-            html.Div(
-                [                    
-                    html.A(html.Img(src=chemin_poi_jaune,style={"width": "15px", "height": "15px","marginLeft": "10px","justifyContent": "start",})),                        
-                    html.Span(
-                            html.I(className="bi bi-circle-fill", style={'color': 'yellow','fontSize': '12px'}),
-                            style={'marginLeft': '5px'}
-                    ),                   
-                    html.Span("Expo et vente", 
-                              style={'fontSize':'12px', 'fontFamily':'Lato',"marginLeft": "10px","justifyContent": "start",}
-                    ),   
-
-                ],style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "alignContent": "space-around",
-                    "marginBottom": "5px",
-                    "marginTop": "5px",}
-            ),
-
-            html.Div(
-                [                    
-                    html.A(html.Img(src=chemin_poi_pink,style={"width": "15px", "height": "15px","marginLeft": "10px","justifyContent": "start",})),                        
-                    html.Span(
-                            html.I(className="bi bi-circle-fill", style={'color': 'pink','fontSize': '12px'}),
-                            style={'marginLeft': '5px'}
-                    ),                   
-                    html.Span("Non renseigné", 
-                              style={'fontSize':'12px', 'fontFamily':'Lato',"marginLeft": "10px","justifyContent": "start",}
-                    ),   
-
-                ],style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "alignContent": "space-around",
-                    "marginBottom": "5px",
-                    "marginTop": "5px",}
-            ),
-
-            html.Div(
-                [                    
-                    html.A(html.Img(src=chemin_poi_blue,style={"width": "15px", "height": "15px","marginLeft": "10px","justifyContent": "start",})),                        
-                    html.Span(
-                            html.I(className="bi bi-circle-fill", style={'color': 'blue','fontSize': '12px'}),
-                            style={'marginLeft': '5px'}
-                    ),                   
-                    html.Span("Patrimoine historique", 
-                              style={'fontSize':'12px', 'fontFamily':'Lato',"marginLeft": "10px","justifyContent": "start",}
-                    ),   
-
-                ],style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "alignContent": "space-around",
-                    "marginBottom": "5px",
-                    "marginTop": "5px",}
-            ),
-
-            html.Div(
-                [                    
-                    html.A(html.Img(src=chemin_poi_red,style={"width": "15px", "height": "15px","marginLeft": "10px","justifyContent": "start",})),                        
-                    html.Span(
-                            html.I(className="bi bi-circle-fill", style={'color': 'red','fontSize': '12px'}),
-                            style={'marginLeft': '5px'}
-                    ),                   
-                    html.Span("Patrimoine naturel", 
-                              style={'fontSize':'12px', 'fontFamily':'Lato',"marginLeft": "10px","justifyContent": "start",}
-                    ),   
-
-                ],style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "alignContent": "space-around",
-                    "marginBottom": "5px",
-                    "marginTop": "5px",}
-            ),
-
-            html.Div(
-                [                    
-                    html.A(html.Img(src=chemin_poi_green,style={"width": "15px", "height": "15px","marginLeft": "10px","justifyContent": "start",})),                        
-                    html.Span(
-                            html.I(className="bi bi-circle-fill", style={'color': 'green','fontSize': '12px'}),
-                            style={'marginLeft': '5px'}
-                    ),                   
-                    html.Span("Social et culturel", 
-                              style={'fontSize':'12px', 'fontFamily':'Lato',"marginLeft": "10px","justifyContent": "start",}
-                    ),   
-
-                ],style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "alignContent": "space-around",
-                    "marginBottom": "5px",
-                    "marginTop": "5px",}
-            ),
-
-            html.Div(
-                [                    
-                    html.A(html.Img(src=chemin_poi_orange,style={"width": "15px", "height": "15px","marginLeft": "10px","justifyContent": "start",})),                        
-                    html.Span(
-                            html.I(className="bi bi-circle-fill", style={'color': 'orange','fontSize': '12px'}),
-                            style={'marginLeft': '5px'}
-                    ),                   
-                    html.Span("Sport", 
-                              style={'fontSize':'12px', 'fontFamily':'Lato',"marginLeft": "10px","justifyContent": "start",}
-                    ),   
-
-                ],style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "alignContent": "space-around",
-                    "marginBottom": "5px",
-                    "marginTop": "5px",}
-            ),
-
-
-        ], style ={"height": "230px",
-                    "width": "200px",
-                    "position": "absolute",
-                    "bottom": "25px",
-                    "right": "5px",
-                    "zIndex": "1000",
-                    "backgroundColor": "white",
-                    "justifyContent": "center",
-                    "alignItems": "center"}
-    )
-    
-    
-    
-    
-    # Crea un diccionario de opciones para personalizar la apariencia de los puntos    
-    color_prop = 'reclass'  
-
-    # Asigna colores específicos a cada categoría
-    category_colors = {
+#       Définition de color_prop dehors le callback
+color_prop = 'reclass'  
+# Asigna colores específicos a cada categoría
+category_colors = {
         'Patrimoine naturel': 'red',
         'Sport': 'orange',
         'Expo et vente': 'yellow',
@@ -670,70 +511,72 @@ def update_map(geojson_nuites,geojson_evenement,geojson_dpt,geojson_permanent):
         'Non renseigné': 'violet'
     }
 
-    point_to_layer = assign("""function(feature, latlng, context){
-        const {circleOptions, colorProp} = context.hideout;
-        const categoryColors = context.hideout.categoryColors;  // Agrega esta línea para obtener el diccionario de colores
-        const color = categoryColors[feature.properties[colorProp]] ;  // Si la categoría no tiene un color definido, usa gris
-        circleOptions.fillColor = color;
-        return L.circleMarker(latlng, circleOptions);
-    }""")
+point_to_layer = assign("""function(feature, latlng, context){
+    const { categoryColors, circleOptions, reclassProp } = context.hideout;
+    const category = feature.properties[reclassProp];
+    circleOptions.fillColor = categoryColors[category] || 'gray';  // asignar color según la categoría o gris si no hay coincidencia
+    return L.circleMarker(latlng, circleOptions);  // renderizar un simple marcador circular
+}""")
 
 
 
-    cluster_to_layer = assign("""function(feature, latlng, index, context){
-        const {circleOptions, colorProp} = context.hideout;
-        const categoryColors = context.hideout.categoryColors;
-        // Set color based on the most frequent category value in the cluster.
-        const leaves = index.getLeaves(feature.properties.cluster_id);
-        let categoryCounts = {};
 
-        for (let i = 0; i < leaves.length; ++i) {
-            const category = leaves[i].properties[colorProp];
-            categoryCounts[category] = (categoryCounts[category] || 0) + 1;
-        }
-
-        let maxCategory = null;
-        let maxCount = 0;
-
-        // Find the most frequent category
-        Object.keys(categoryCounts).forEach(category => {
-            if (categoryCounts[category] > maxCount) {
-                maxCount = categoryCounts[category];
-                maxCategory = category;
-            }
-        });
-
-        const color = categoryColors[maxCategory] || 'gray';  // If the category is not defined, use gray
-
-        // Modify icon background color.
-        const scatterIcon = L.DivIcon.extend({
-            createIcon: function(oldIcon) {
-                let icon = L.DivIcon.prototype.createIcon.call(this, oldIcon);
-                icon.style.backgroundColor = color;
-                return icon;
-            }
-        });
-
-        // Render a circle with the number of leaves written in the center.
-        const icon = new scatterIcon({
-            html: '<div style="background-color:white;"><span>' + feature.properties.point_count_abbreviated + '</span></div>',
-            className: "marker-cluster",
-            iconSize: L.point(40, 40),
-            color: color
-        });
-
-        return L.marker(latlng, {icon : icon});
-    }""")  
+cluster_to_layer = assign("""function(feature, latlng, index, context){
+    const { categoryColors, circleOptions, reclassProp } = context.hideout;
     
+    // Obtener la lista de puntos en el cluster.
+    const leaves = index.getLeaves(feature.properties.cluster_id);
+    
+    // Contar la frecuencia de cada categoría en el cluster.
+    const categoryCounts = {};
+    leaves.forEach(leaf => {
+        const category = leaf.properties[reclassProp];
+        categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    });
+    
+    // Encontrar la categoría con la frecuencia máxima.
+    const dominantCategory = Object.keys(categoryCounts).reduce((a, b) => categoryCounts[a] > categoryCounts[b] ? a : b);
+
+    // Obtener el color correspondiente a la categoría dominante.
+    const clusterColor = categoryColors[dominantCategory] || 'gray';
+    
+    // Renderizar un círculo con el número de puntos en el centro.
+    const scatterIcon = L.DivIcon.extend({
+        createIcon: function(oldIcon) {
+            let icon = L.DivIcon.prototype.createIcon.call(this, oldIcon);
+            icon.style.backgroundColor = this.options.color;
+            return icon;
+        }
+    });
+
+    const icon = new scatterIcon({
+        html: '<div style="background-color:white;"><span>' + feature.properties.point_count_abbreviated + '</span></div>',
+        className: "marker-cluster",
+        iconSize: L.point(40, 40),
+        color: clusterColor
+    });
+    
+    return L.marker(latlng, { icon: icon });
+}""") 
 
 
+
+@app.callback(
+    Output('map_div', 'children'),
+    [
+        Input('output_geojson_nuites', 'data'),
+        Input('output_geojson_evenements', 'data'),
+        Input('output_geojson_dpt', 'data'),
+        Input('output_geojson_poi_permanent', 'data')
+    ]
+)
+def update_map(geojson_nuites, geojson_evenement,geojson_dpt,geojson_permanent):  
    
     dpt =  dl.GeoJSON(
                         data=geojson_dpt,  
-                        # options = dict(style=style_handle),
+                        # filter= dpt_filter,
                         zoomToBoundsOnClick=True,
                         zoomToBounds=True, 
-                        # hoverStyle=arrow_function(dict(weight=5, color='#666', dashArray='')),  # style applied on hover                       
                         id="geojson_dpt"
                 )
     
@@ -753,7 +596,10 @@ def update_map(geojson_nuites,geojson_evenement,geojson_dpt,geojson_permanent):
                         id="geojson_evenements",
                         pointToLayer=point_to_layer,
                         clusterToLayer=cluster_to_layer,  # how to draw clusters                        
-                        hideout=dict(colorProp=color_prop, circleOptions=dict(fillOpacity=1, stroke=False, radius=6), categoryColors=category_colors)
+                        hideout=dict(
+                            reclassProp='reclass',
+                            categoryColors=category_colors,
+                            circleOptions=dict(fillOpacity=1, stroke=False, radius=5),)
                 )     
         
     poi_permanent = dl.GeoJSON(
@@ -764,9 +610,11 @@ def update_map(geojson_nuites,geojson_evenement,geojson_dpt,geojson_permanent):
                         id="geojson_permanents",
                         pointToLayer=point_to_layer,
                         clusterToLayer=cluster_to_layer,  # how to draw clusters                        
-                        hideout=dict(colorProp=color_prop, circleOptions=dict(fillOpacity=1, stroke=False, radius=6), categoryColors=category_colors)
-
-    )
+                        hideout=dict(
+                            reclassProp='reclass',
+                            categoryColors=category_colors,
+                            circleOptions=dict(fillOpacity=1, stroke=False, radius=5),)
+        )
     
 
     return  dl.Map(
@@ -809,7 +657,7 @@ def update_map(geojson_nuites,geojson_evenement,geojson_dpt,geojson_permanent):
     [Input('dpt_dropdown', 'value'),Input('offre_dropdown', 'value'),Input('occupation_dropdown', 'value')])
 def update_titre(departement,type_offre,type_occupation):
 
-    offres_filtered = nuites_geojson[(nuites_geojson['libdept']== departement) & (nuites_geojson['offre']==type_offre) & (nuites_geojson['occup']==type_occupation)] 
+    offres_filtered = gdf_nuites[(gdf_nuites['libdept']== departement) & (gdf_nuites['offre']==type_offre) & (gdf_nuites['occup']==type_occupation)] 
     nb_offre = offres_filtered['offre'].value_counts().sum()
     nb_offre_text = html.Span(f"{nb_offre}", style= {'color': 'white', 'fontSize':'60px', 'fontWeight': 'bold'})
 
@@ -837,7 +685,7 @@ def update_titre(departement,date_initiale,date_finale):
 
     if date_initiale is not None and date_finale is not None:
 
-        poi_filtered = poi_evenement_geojson[(poi_evenement_geojson['libdept']== departement)&(poi_evenement_geojson['date_initial']>= date_initiale)&(poi_evenement_geojson['date_final']<= date_finale)] 
+        poi_filtered = gdf_evenements[(gdf_evenements['libdept']== departement)&(gdf_evenements['date_initial']>= date_initiale)&(gdf_evenements['date_final']<= date_finale)] 
         nb_evenements = poi_filtered['gid'].value_counts().sum()
         if nb_evenements == 0 : 
             nb_evenements_text = html.Span("Il n'existe pas d'évènements entre les dates choisies", style= {'color': 'white', 'fontSize':'15px','textAlign':'center'})            
@@ -861,7 +709,7 @@ def update_titre(departement,date_initiale,date_finale):
     [Input('dpt_dropdown', 'value')])
 def update_titre(departement):
 
-    poi_filtered = poi_permanent_geojson[(poi_permanent_geojson['libdept']== departement)] 
+    poi_filtered = gdf_permanents[(gdf_permanents['libdept']== departement)] 
     nb_poi_permanent = poi_filtered['gid'].value_counts().sum()
     nb_poi_permanent_text = html.Span(f"{nb_poi_permanent}", style= {'color': 'white', 'fontSize':'60px', 'fontWeight': 'bold'})
 
@@ -872,6 +720,6 @@ def update_titre(departement):
 
 
 if __name__ == '__main__':
-    app.run(debug=False,
+    app.run(debug=True,
             dev_tools_hot_reload=False
             )
